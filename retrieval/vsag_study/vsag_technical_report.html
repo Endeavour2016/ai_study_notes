@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSAG 向量检索引擎 - 技术深潜报告</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style type="text/tailwindcss">
+        @layer base {
+            body {
+                font-family: 'Inter', sans-serif;
+                background: #0a0a0f;
+                color: #e2e8f0;
+            }
+            code, pre {
+                font-family: 'JetBrains Mono', monospace;
+            }
+        }
+        @layer components {
+            .gradient-text {
+                background: linear-gradient(135deg, #00f5ff 0%, #7c3aed 50%, #f472b6 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .glow-border {
+                box-shadow: 0 0 20px rgba(0, 245, 255, 0.3), inset 0 0 20px rgba(0, 245, 255, 0.1);
+            }
+            .card-dark {
+                background: linear-gradient(145deg, rgba(30, 30, 40, 0.9), rgba(20, 20, 30, 0.95));
+                border: 1px solid rgba(0, 245, 255, 0.2);
+                backdrop-filter: blur(10px);
+            }
+            .neon-accent {
+                text-shadow: 0 0 10px rgba(0, 245, 255, 0.8);
+            }
+            .section-divider {
+                height: 1px;
+                background: linear-gradient(90deg, transparent, #00f5ff, transparent);
+                margin: 3rem 0;
+            }
+            .tech-badge {
+                background: rgba(0, 245, 255, 0.1);
+                border: 1px solid rgba(0, 245, 255, 0.3);
+                color: #00f5ff;
+            }
+            .comparison-table th {
+                background: rgba(0, 245, 255, 0.1);
+                color: #00f5ff;
+            }
+            .comparison-table td {
+                border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+            }
+            .quote-box {
+                border-left: 4px solid #00f5ff;
+                background: rgba(0, 245, 255, 0.05);
+            }
+            .architecture-box {
+                background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(0, 245, 255, 0.1));
+                border: 1px solid rgba(124, 58, 237, 0.3);
+            }
+            .scroll-indicator {
+                animation: bounce 2s infinite;
+            }
+            @keyframes bounce {
+                0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+                40% { transform: translateY(-10px); }
+                60% { transform: translateY(-5px); }
+            }
+            .typing-effect::after {
+                content: '|';
+                animation: blink 1s infinite;
+            }
+            @keyframes blink {
+                0%, 50% { opacity: 1; }
+                51%, 100% { opacity: 0; }
+            }
+            .hover-glow:hover {
+                box-shadow: 0 0 30px rgba(0, 245, 255, 0.4);
+                transform: translateY(-2px);
+                transition: all 0.3s ease;
+            }
+            .diagram-box {
+                background: rgba(20, 20, 30, 0.8);
+                border: 1px solid rgba(0, 245, 255, 0.2);
+                border-radius: 8px;
+                padding: 1rem;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 0.85rem;
+                line-height: 1.6;
+            }
+            .flow-step {
+                background: rgba(0, 245, 255, 0.1);
+                border: 1px solid rgba(0, 245, 255, 0.3);
+                border-radius: 6px;
+                padding: 0.5rem 1rem;
+                margin: 0.25rem;
+                display: inline-block;
+            }
+            .storage-tag {
+                display: inline-block;
+                padding: 0.25rem 0.5rem;
+                border-radius: 4px;
+                font-size: 0.75rem;
+                font-weight: 600;
+            }
+            .storage-memory {
+                background: rgba(0, 245, 255, 0.2);
+                color: #00f5ff;
+            }
+            .storage-disk {
+                background: rgba(236, 72, 153, 0.2);
+                color: #ec4899;
+            }
+            .storage-mmap {
+                background: rgba(251, 146, 60, 0.2);
+                color: #fb923c;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen overflow-x-hidden">
+    <!-- 背景装饰 -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-pink-500/5 rounded-full blur-3xl"></div>
+    </div>
+
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-md border-b border-cyan-500/20">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center">
+                    <span class="text-white font-bold text-xl">V</span>
+                </div>
+                <span class="text-xl font-bold gradient-text">VSAG</span>
+            </div>
+            <div class="hidden md:flex gap-6 text-sm">
+                <a href="#overview" class="hover:text-cyan-400 transition-colors">概览</a>
+                <a href="#indexes" class="hover:text-cyan-400 transition-colors">核心索引</a>
+                <a href="#hgraph" class="hover:text-cyan-400 transition-colors">HGraph</a>
+                <a href="#pyramid" class="hover:text-cyan-400 transition-colors">Pyramid</a>
+                <a href="#sindi" class="hover:text-cyan-400 transition-colors">SINDI</a>
+                <a href="#quantization" class="hover:text-cyan-400 transition-colors">量化技术</a>
+                <a href="#storage" class="hover:text-cyan-400 transition-colors">存储系统</a>
+                <a href="#comparison" class="hover:text-cyan-400 transition-colors">选型指南</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative z-10 min-h-screen flex items-center justify-center px-6 pt-20">
+        <div class="max-w-5xl mx-auto text-center">
+            <div class="mb-6">
+                <span class="tech-badge px-4 py-2 rounded-full text-sm font-medium">技术深潜报告</span>
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+                <span class="gradient-text">VSAG</span>
+                <br>
+                <span class="text-white">向量检索引擎</span>
+                <br>
+                <span class="text-2xl md:text-3xl text-gray-400 font-light typing-effect">高性能近似最近邻搜索</span>
+            </h1>
+            <p class="text-xl text-gray-400 max-w-3xl mx-auto mb-12 leading-relaxed">
+                面向海量高维向量数据的高性能近似最近邻搜索解决方案
+                <br>支持多种索引结构、智能量化压缩与灵活的存储策略
+            </p>
+            <div class="flex flex-wrap justify-center gap-4 mb-16">
+                <div class="card-dark px-6 py-4 rounded-xl hover-glow">
+                    <div class="text-3xl font-bold text-cyan-400">5+</div>
+                    <div class="text-sm text-gray-400">索引类型</div>
+                </div>
+                <div class="card-dark px-6 py-4 rounded-xl hover-glow">
+                    <div class="text-3xl font-bold text-purple-400">256x</div>
+                    <div class="text-sm text-gray-400">最大压缩率</div>
+                </div>
+                <div class="card-dark px-6 py-4 rounded-xl hover-glow">
+                    <div class="text-3xl font-bold text-pink-400">&lt;10ms</div>
+                    <div class="text-sm text-gray-400">查询延迟</div>
+                </div>
+                <div class="card-dark px-6 py-4 rounded-xl hover-glow">
+                    <div class="text-3xl font-bold text-orange-400">10亿+</div>
+                    <div class="text-sm text-gray-400">数据规模</div>
+                </div>
+            </div>
+            <div class="scroll-indicator">
+                <svg class="w-6 h-6 mx-auto text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                </svg>
+            </div>
+        </div>
+    </section>
+
+    <!-- 概览 Section -->
+    <section id="overview" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 gradient-text">什么是 VSAG？</h2>
+            <p class="text-gray-400 text-lg mb-12">VSAG 是蚂蚁集团开源的<span class="text-cyan-400 font-semibold">高性能向量检索库</span>，专为海量高维向量的近似最近邻搜索（Approximate Nearest Neighbor Search, ANNS）而设计。</p>
+            
+            <div class="grid md:grid-cols-2 gap-8 mb-16">
+                <div class="card-dark p-8 rounded-2xl">
+                    <h3 class="text-2xl font-bold mb-4 text-cyan-400">核心问题</h3>
+                    <ul class="space-y-3 text-gray-300">
+                        <li class="flex items-start gap-3">
+                            <span class="text-cyan-400 mt-1">▸</span>
+                            <span>传统数据库难以高效处理高维向量相似度计算</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-cyan-400 mt-1">▸</span>
+                            <span>暴力搜索时间复杂度为 O(N)，无法应对亿级数据</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-cyan-400 mt-1">▸</span>
+                            <span>高维数据的存储与内存成本呈指数级增长</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-dark p-8 rounded-2xl">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-400">解决方案</h3>
+                    <ul class="space-y-3 text-gray-300">
+                        <li class="flex items-start gap-3">
+                            <span class="text-purple-400 mt-1">▸</span>
+                            <span><strong class="text-white">多索引架构</strong>：HGraph、Pyramid、SINDI、HNSW、DiskANN 等</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-purple-400 mt-1">▸</span>
+                            <span><strong class="text-white">智能量化</strong>：FP32/FP16/SQ8/PQ/RaBitQ，压缩率 2x-256x</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-purple-400 mt-1">▸</span>
+                            <span><strong class="text-white">灵活存储</strong>：内存、磁盘、MMap、异步 IO 多种模式</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="architecture-box p-6 rounded-xl mb-12">
+                <h4 class="font-semibold text-white mb-4">应用场景类比</h4>
+                <p class="text-gray-300 mb-4">向量检索可类比为<span class="text-cyan-400">图书馆检索系统</span>：</p>
+                <ul class="mt-3 space-y-2 text-gray-400">
+                    <li>• <strong class="text-cyan-400">暴力搜索</strong>：逐本翻阅所有书籍，精确但效率极低</li>
+                    <li>• <strong class="text-purple-400">索引检索</strong>：先通过分类目录（索引）定位，再在目标区域精确查找</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- 核心索引概览 Section -->
+    <section id="indexes" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 gradient-text">核心索引架构</h2>
+            <p class="text-gray-400 text-lg mb-12">VSAG 提供多种索引结构，针对不同数据特征和应用场景进行优化。以下按照推荐优先级介绍三种核心索引。</p>
+
+            <!-- 索引对比表 -->
+            <div class="card-dark p-8 rounded-2xl mb-12">
+                <h3 class="text-2xl font-bold mb-6 text-white">索引特性概览</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">索引类型</th>
+                                <th class="text-left p-3">数据结构</th>
+                                <th class="text-left p-3">存储模式</th>
+                                <th class="text-left p-3">最佳适用场景</th>
+                                <th class="text-left p-3 rounded-tr-lg">数据规模</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-semibold text-purple-400">HGraph</td>
+                                <td class="p-3">分层图 + ODescent</td>
+                                <td class="p-3"><span class="storage-tag storage-memory">内存</span> <span class="storage-tag storage-mmap">MMap</span></td>
+                                <td class="p-3">通用稠密向量、高召回率</td>
+                                <td class="p-3">百万-千万级</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold text-orange-400">Pyramid</td>
+                                <td class="p-3">分层树形图</td>
+                                <td class="p-3"><span class="storage-tag storage-memory">内存</span> <span class="storage-tag storage-mmap">MMap</span></td>
+                                <td class="p-3">带路径过滤的分层数据</td>
+                                <td class="p-3">百万-亿级</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold text-pink-400">SINDI</td>
+                                <td class="p-3">倒排索引 + 窗口</td>
+                                <td class="p-3"><span class="storage-tag storage-memory">内存</span></td>
+                                <td class="p-3">高维稀疏向量</td>
+                                <td class="p-3">百万-千万级</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- HGraph Section -->
+    <section id="hgraph" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex items-center gap-4 mb-6">
+                <h2 class="text-4xl font-bold gradient-text">HGraph</h2>
+                <span class="tech-badge px-3 py-1 rounded-full text-sm" style="border-color: #a855f7; color: #a855f7; background: rgba(168, 85, 247, 0.1);">推荐首选</span>
+            </div>
+            <p class="text-gray-400 text-lg mb-8">Hierarchical Graph · 分层图索引</p>
+
+            <!-- 一句话总结 -->
+            <div class="quote-box p-4 rounded-lg mb-8">
+                <p class="text-gray-300"><strong class="text-purple-400">一句话总结：</strong>HGraph 是一种分层图索引，结合 HNSW 的多层导航思想和 ODescent 的图构建算法，通过双层量化（粗量化+精量化）和路由图优化，实现高效的近似最近邻搜索。</p>
+            </div>
+
+            <!-- 与 HNSW 的差异 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-purple-400">HGraph vs HNSW：核心差异</h3>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div>
+                        <h4 class="font-semibold text-white mb-4">图构建算法</h4>
+                        <div class="space-y-4">
+                            <div class="bg-black/30 p-4 rounded-lg">
+                                <div class="text-cyan-400 font-bold mb-2">HNSW</div>
+                                <div class="text-gray-400 text-sm">使用 NSW（Navigable Small World）算法，逐个插入节点，每层贪心搜索最近邻居建立连接</div>
+                            </div>
+                            <div class="bg-black/30 p-4 rounded-lg border border-purple-500/30">
+                                <div class="text-purple-400 font-bold mb-2">HGraph</div>
+                                <div class="text-gray-400 text-sm">使用 ODescent 算法，基于近似 K 近邻迭代优化图结构，构建更高质量的图拓扑</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-white mb-4">量化与存储</h4>
+                        <div class="space-y-4">
+                            <div class="bg-black/30 p-4 rounded-lg">
+                                <div class="text-cyan-400 font-bold mb-2">HNSW</div>
+                                <div class="text-gray-400 text-sm">主要存储原始向量或简单量化，内存占用较高</div>
+                            </div>
+                            <div class="bg-black/30 p-4 rounded-lg border border-purple-500/30">
+                                <div class="text-purple-400 font-bold mb-2">HGraph</div>
+                                <div class="text-gray-400 text-sm">支持双层量化（基础量化 + 高精度重排序），内存效率更高，支持多种量化类型（SQ8/PQ/RaBitQ）</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 grid md:grid-cols-3 gap-4">
+                    <div class="bg-black/30 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-purple-400 mb-2">ODescent</div>
+                        <div class="text-gray-400 text-sm">更优的图构建算法</div>
+                    </div>
+                    <div class="bg-black/30 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-purple-400 mb-2">双层量化</div>
+                        <div class="text-gray-400 text-sm">粗量化+精量化重排序</div>
+                    </div>
+                    <div class="bg-black/30 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-purple-400 mb-2">路由图</div>
+                        <div class="text-gray-400 text-sm">优化的分层导航结构</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 架构原理 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">架构原理</h3>
+                
+                <div class="mb-8">
+                    <h4 class="font-semibold text-purple-400 mb-4">1. 双层存储结构</h4>
+                    <div class="diagram-box mb-4">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      HGraph 存储架构                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   查询向量 ──→ 路由图搜索 ──→ 底层图搜索 ──→ 结果精排          │
+│                                                             │
+│   ┌─────────────────┐     ┌─────────────────┐              │
+│   │   路由图数组     │     │   底层图结构     │              │
+│   │  route_graphs_  │     │  bottom_graph_  │              │
+│   │  （稀疏导航层）  │     │  （完整数据层）  │              │
+│   └─────────────────┘     └─────────────────┘              │
+│                                                             │
+│   ┌─────────────────┐     ┌─────────────────┐              │
+│   │  基础量化编码    │     │  高精度编码      │              │
+│   │ basic_flatten_  │     │ high_precise_   │              │
+│   │    codes_       │     │    codes_       │              │
+│   │ （快速距离计算） │     │ （结果重排序）   │              │
+│   └─────────────────┘     └─────────────────┘              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                    </div>
+                </div>
+
+                <div class="mb-8">
+                    <h4 class="font-semibold text-purple-400 mb-4">2. 关键组件说明</h4>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-purple-400 font-bold mb-2">bottom_graph_</div>
+                            <div class="text-gray-400 text-sm">存储所有向量的邻接关系，使用 ODescent 算法构建，保证图的质量和连通性</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-purple-400 font-bold mb-2">route_graphs_</div>
+                            <div class="text-gray-400 text-sm">多层导航图，用于快速定位到大致区域，减少底层图的搜索范围</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-purple-400 font-bold mb-2">basic_flatten_codes_</div>
+                            <div class="text-gray-400 text-sm">压缩存储的向量编码（SQ8/PQ等），用于快速距离计算和候选集筛选</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-purple-400 font-bold mb-2">high_precise_codes_</div>
+                            <div class="text-gray-400 text-sm">高精度向量编码（FP16/FP32），用于对候选集进行精确重排序</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 构建流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">构建流程</h3>
+                
+                <div class="mb-6">
+                    <h4 class="font-semibold text-purple-400 mb-4">阶段一：训练（Train）</h4>
+                    <div class="diagram-box">
+<pre>
+原始数据 ──→ 采样训练数据 ──→ 训练基础量化器 ──→ 训练高精度量化器
+
+void HGraph::Train(const DatasetPtr& base) {
+    // 1. 采样训练数据
+    DatasetPtr train_data = vsag::sample_train_data(base, ...);
+    
+    // 2. 训练基础量化编码
+    this->basic_flatten_codes_->Train(data_ptr, train_data->GetNumElements());
+    
+    // 3. 训练高精度编码（用于重排序）
+    if (use_reorder_) {
+        this->high_precise_codes_->Train(data_ptr, train_data->GetNumElements());
+    }
+}</pre>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h4 class="font-semibold text-purple-400 mb-4">阶段二：构建（Build）</h4>
+                    <p class="text-gray-400 mb-4">HGraph 支持两种图构建方式：</p>
+                    
+                    <div class="grid md:grid-cols-2 gap-6 mb-4">
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-cyan-400 font-bold mb-2">方式一：NSW（导航小世界）</div>
+                            <div class="text-gray-400 text-sm space-y-2">
+                                <div>• 逐个插入节点</div>
+                                <div>• 每层贪心搜索最近邻居</div>
+                                <div>• 连接到最近 M 个邻居</div>
+                                <div>• 双向连接并修剪多余边</div>
+                            </div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg border border-purple-500/30">
+                            <div class="text-purple-400 font-bold mb-2">方式二：ODescent（默认推荐）</div>
+                            <div class="text-gray-400 text-sm space-y-2">
+                                <div>• 计算近似 K 近邻</div>
+                                <div>• 迭代优化图结构</div>
+                                <div>• 添加反向边保证连通性</div>
+                                <div>• 修剪低质量边</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diagram-box">
+<pre>
+std::vector&lt;int64_t&gt; HGraph::Build(const DatasetPtr& data) {
+    this->Train(data);
+    if (graph_type_ == GRAPH_TYPE_VALUE_NSW) {
+        return this->Add(data);           // NSW方式：逐个添加
+    } else {
+        return this->build_by_odescent(data);  // ODescent方式：批量优化
+    }
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 搜索流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">搜索流程</h3>
+                
+                <div class="diagram-box mb-6">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      HGraph 搜索流程                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 查询向量进入 ──→ 使用基础编码计算距离                      │
+│                                                             │
+│  2. 路由图搜索 ──→ 快速定位到候选区域                          │
+│        ↓                                                    │
+│  3. 底层图贪心搜索 ──→ 在候选区域内精确搜索                    │
+│        ↓                                                    │
+│  4. 候选集收集 ──→ 获取 ef_search 个候选结果                  │
+│        ↓                                                    │
+│  5. 重排序（可选）──→ 使用高精度编码重新计算距离               │
+│        ↓                                                    │
+│  6. 返回 Top-K 结果                                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-purple-400 font-bold mb-2">贪心搜索算法核心逻辑</div>
+                    <div class="diagram-box mt-2">
+<pre>
+DatasetPtr HGraph::KnnSearch(const DatasetPtr& query, int64_t k, ...) {
+    // 1. 使用基础编码计算距离
+    auto codes = basic_flatten_codes_;
+    
+    // 2. 贪心搜索找到候选集
+    auto candidates = searcher_->Search(query, ef_search);
+    
+    // 3. 如果需要重排序，使用高精度编码
+    if (use_reorder_) {
+        candidates = reorder_->Reorder(candidates, query, k);
+    }
+    
+    // 4. 返回 Top-K 结果
+    return candidates.TopK(k);
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 存储策略 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">存储策略</h3>
+                <p class="text-gray-400 mb-6">HGraph 支持多种存储类型，通过参数灵活配置：</p>
+                
+                <div class="grid md:grid-cols-3 gap-4">
+                    <div class="bg-black/30 p-4 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="storage-tag storage-memory">memory_io</span>
+                        </div>
+                        <div class="text-gray-400 text-sm">纯内存存储，访问速度最快，适合数据量可完全放入内存的场景</div>
+                    </div>
+                    <div class="bg-black/30 p-4 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="storage-tag storage-mmap">mmap_io</span>
+                        </div>
+                        <div class="text-gray-400 text-sm">内存映射文件，操作系统自动管理内存页，适合大内存数据</div>
+                    </div>
+                    <div class="bg-black/30 p-4 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="storage-tag storage-disk">async_io</span>
+                        </div>
+                        <div class="text-gray-400 text-sm">异步 IO，重叠计算与 IO 操作，适合磁盘存储场景</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心参数 -->
+            <div class="card-dark p-8 rounded-2xl">
+                <h3 class="text-2xl font-bold mb-6 text-white">核心参数</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">参数名</th>
+                                <th class="text-left p-3">类型</th>
+                                <th class="text-left p-3">默认值</th>
+                                <th class="text-left p-3 rounded-tr-lg">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">base_quantization_type</td>
+                                <td class="p-3">string</td>
+                                <td class="p-3">必填</td>
+                                <td class="p-3">基础量化类型：fp32/fp16/sq8/pq/rabitq</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">use_reorder</td>
+                                <td class="p-3">bool</td>
+                                <td class="p-3">false</td>
+                                <td class="p-3">是否启用高精度重排序</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">max_degree</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">64</td>
+                                <td class="p-3">每个节点的最大邻居数</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">ef_construction</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">400</td>
+                                <td class="p-3">构建时的搜索范围，越大图质量越高</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">graph_type</td>
+                                <td class="p-3">string</td>
+                                <td class="p-3">nsw</td>
+                                <td class="p-3">图构建算法：nsw 或 odescent</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-purple-400">base_io_type</td>
+                                <td class="p-3">string</td>
+                                <td class="p-3">block_memory_io</td>
+                                <td class="p-3">存储类型：memory_io/mmap_io/async_io</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- Pyramid Section -->
+    <section id="pyramid" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex items-center gap-4 mb-6">
+                <h2 class="text-4xl font-bold gradient-text">Pyramid</h2>
+                <span class="tech-badge px-3 py-1 rounded-full text-sm" style="border-color: #fb923c; color: #fb923c; background: rgba(251, 146, 60, 0.1);">分层树形索引</span>
+            </div>
+            <p class="text-gray-400 text-lg mb-8">分层树形图索引 · 支持路径过滤</p>
+
+            <!-- 一句话总结 -->
+            <div class="quote-box p-4 rounded-lg mb-8">
+                <p class="text-gray-300"><strong class="text-orange-400">一句话总结：</strong>Pyramid 是一种分层树形图索引，通过路径导航和多级子索引结构，将数据按层次组织成金字塔形状，支持基于路径的高效过滤搜索。</p>
+            </div>
+
+            <!-- 架构原理 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">架构原理</h3>
+                
+                <div class="mb-8">
+                    <h4 class="font-semibold text-orange-400 mb-4">1. 树形层次结构</h4>
+                    <p class="text-gray-400 mb-4">Pyramid 将数据组织成树形结构，每个节点代表一个数据分区，支持通过路径快速定位：</p>
+                    <div class="diagram-box">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      Pyramid 树形结构                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│                         ┌─────────┐                         │
+│                         │  Root   │  ← 根节点（导航层）       │
+│                         │(NO_INDEX│                         │
+│                         │ 导航层) │                         │
+│                         └────┬────┘                         │
+│           ┌──────────────────┼──────────────────┐          │
+│           ▼                  ▼                  ▼          │
+│      ┌─────────┐       ┌─────────┐       ┌─────────┐      │
+│      │ Node_A  │       │ Node_B  │       │ Node_C  │      │
+│      │(NO_INDEX│       │(NO_INDEX│       │(GRAPH/  │      │
+│      │ 分类层) │       │ 分类层) │       │  FLAT)  │      │
+│      └────┬────┘       └────┬────┘       └────┬────┘      │
+│    ┌──────┴──────┐          │                  │          │
+│    ▼             ▼          ▼                  ▼          │
+│ ┌─────────┐  ┌─────────┐                ┌─────────┐       │
+│ │Node_A1  │  │Node_A2  │                │ 数据点  │       │
+│ │(GRAPH)  │  │(FLAT)   │                │ 图/列表 │       │
+│ └────┬────┘  └────┬────┘                └─────────┘       │
+│      │             │                                       │
+│      ▼             ▼                                       │
+│   ┌─────────┐  ┌─────────┐                                │
+│   │ 向量图  │  │ ID列表  │                                │
+│   │ 邻居关系│  │ [5,8,12]│                                │
+│   └─────────┘  └─────────┘                                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                    </div>
+                </div>
+
+                <div class="mb-8">
+                    <h4 class="font-semibold text-orange-400 mb-4">2. 节点状态机</h4>
+                    <p class="text-gray-400 mb-4">每个节点根据数据量自动选择存储策略：</p>
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <div class="bg-black/30 p-4 rounded-lg text-center">
+                            <div class="text-orange-400 font-bold mb-2">NO_INDEX</div>
+                            <div class="text-gray-400 text-sm">未构建索引，仅作为导航节点，包含子节点映射</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg text-center">
+                            <div class="text-orange-400 font-bold mb-2">GRAPH</div>
+                            <div class="text-gray-400 text-sm">数据量 >= index_min_size，构建图索引进行高效搜索</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg text-center">
+                            <div class="text-orange-400 font-bold mb-2">FLAT</div>
+                            <div class="text-gray-400 text-sm">数据量 < index_min_size，使用暴力搜索</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-semibold text-orange-400 mb-4">3. 关键组件</h4>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-orange-400 font-bold mb-2">root_</div>
+                            <div class="text-gray-400 text-sm">根节点，所有搜索的入口点，负责路径解析和子节点路由</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-orange-400 font-bold mb-2">IndexNode</div>
+                            <div class="text-gray-400 text-sm">索引节点，包含状态、图结构、入口点和子节点映射</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-orange-400 font-bold mb-2">base_codes_</div>
+                            <div class="text-gray-400 text-sm">向量编码存储，支持多种量化类型</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-orange-400 font-bold mb-2">odescent_param_</div>
+                            <div class="text-gray-400 text-sm">图构建参数，控制图的质量和密度</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 构建流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">构建流程</h3>
+                
+                <div class="diagram-box mb-6">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                     Pyramid 构建流程                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  原始数据 + 路径 ──→ 按路径分组 ──→ 递归构建子节点              │
+│                                                             │
+│  对每个节点：                                                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  数据量 >= min_size ?                                │   │
+│  │      ├── 是 ──→ 构建图索引（ODescent）               │   │
+│  │      │           ├── 设置入口点                      │   │
+│  │      │           ├── 构建邻居图                      │   │
+│  │      │           └── 保存图结构                      │   │
+│  │      │                                               │   │
+│  │      └── 否 ──→ 使用 FLAT 模式                       │   │
+│  │                  └── 保存原始 ID 列表                │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  递归构建所有子节点                                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-orange-400 font-bold mb-2">核心构建代码</div>
+                    <div class="diagram-box mt-2">
+<pre>
+void IndexNode::Build(ODescent& odescent) {
+    std::unique_lock lock(mutex_);
+    
+    // 1. 初始化当前节点
+    if (not ids_.empty()) {
+        Init();  // 根据数据量决定是 GRAPH 还是 FLAT
+    }
+    
+    // 2. 如果是图节点，构建图
+    if (status_ == Status::GRAPH) {
+        entry_point_ = ids_[0];
+        odescent.SetMaxDegree(static_cast&lt;int32_t&gt;(graph_param_->max_degree_));
+        odescent.Build(ids_);
+        odescent.SaveGraph(graph_);
+    }
+    
+    // 3. 递归构建子节点
+    for (const auto& item : children_) {
+        item.second->Build(odescent);
+    }
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 搜索流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">搜索流程</h3>
+                
+                <div class="diagram-box mb-6">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                     Pyramid 搜索流程                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  查询向量 + 路径 ──→ 解析路径 ──→ 沿树导航到目标节点           │
+│                                                             │
+│  在目标节点：                                                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  节点状态判断：                                       │   │
+│  │  ├── GRAPH ──→ 执行图搜索（ODescent/HNSW）          │   │
+│  │  ├── FLAT ──→ 执行暴力搜索                          │   │
+│  │  └── NO_INDEX ──→ 递归搜索所有子节点                │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  合并结果 ──→ 重排序（可选）──→ 返回 Top-K                   │
+│                                                             │
+│  支持多路径并行搜索：                                        │
+│  "electronics/phones,laptops" ──→ 同时搜索两个子树          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-orange-400 font-bold mb-2">路径格式示例</div>
+                    <div class="text-gray-400 text-sm space-y-2 mt-2">
+                        <div><code class="text-cyan-400">"electronics/phones"</code> - 单路径导航</div>
+                        <div><code class="text-cyan-400">"electronics/phones,electronics/laptops"</code> - 多路径并行搜索</div>
+                        <div><code class="text-cyan-400">"2024/01/15/beijing"</code> - 时间/地理层级路径</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自适应参数 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">自适应参数</h3>
+                <p class="text-gray-400 mb-6">Pyramid 根据数据量自动调整参数，无需手动调优：</p>
+                
+                <div class="diagram-box">
+<pre>
+// 根据数据量自动选择 max_degree
+static uint64_t get_suitable_max_degree(int64_t data_num) {
+    if (data_num < 100'000) {
+        return 16;
+    }
+    if (data_num < 1'000'000) {
+        return 32;
+    }
+    return 64;
+}
+
+// 根据数据量和 topk 自动选择 ef_search
+static uint64_t get_suitable_ef_search(int64_t topk, int64_t data_num, ...) {
+    if (data_num < 1'000) {
+        return std::max(static_cast&lt;uint64_t&gt;(1.5F * topk), subindex_ef_search);
+    }
+    if (data_num < 100'000) {
+        return std::max(static_cast&lt;uint64_t&gt;(2.0F * topk), subindex_ef_search * 2);
+    }
+    // ...
+}</pre>
+                </div>
+            </div>
+
+            <!-- 核心参数 -->
+            <div class="card-dark p-8 rounded-2xl">
+                <h3 class="text-2xl font-bold mb-6 text-white">核心参数</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">参数名</th>
+                                <th class="text-left p-3">类型</th>
+                                <th class="text-left p-3">默认值</th>
+                                <th class="text-left p-3 rounded-tr-lg">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-mono text-orange-400">alpha</td>
+                                <td class="p-3">float</td>
+                                <td class="p-3">1.0-1.5</td>
+                                <td class="p-3">图修剪系数，控制图的稀疏程度</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-orange-400">ef_construction</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">100-400</td>
+                                <td class="p-3">构建搜索深度</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-orange-400">max_degree</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">16-64</td>
+                                <td class="p-3">最大邻居数</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-orange-400">index_min_size</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">100-1000</td>
+                                <td class="p-3">最小构建图索引的数据量</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-orange-400">no_build_levels</td>
+                                <td class="p-3">list</td>
+                                <td class="p-3">[0]</td>
+                                <td class="p-3">不建图的层级（根层通常不建图）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- SINDI Section -->
+    <section id="sindi" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex items-center gap-4 mb-6">
+                <h2 class="text-4xl font-bold gradient-text">SINDI</h2>
+                <span class="tech-badge px-3 py-1 rounded-full text-sm" style="border-color: #ec4899; color: #ec4899; background: rgba(236, 72, 153, 0.1);">稀疏向量专用</span>
+            </div>
+            <p class="text-gray-400 text-lg mb-8">Sparse Index with Non-zero Dimension Indexing · 稀疏向量索引</p>
+
+            <!-- 一句话总结 -->
+            <div class="quote-box p-4 rounded-lg mb-8">
+                <p class="text-gray-300"><strong class="text-pink-400">一句话总结：</strong>SINDI 是一种专为高维稀疏数据设计的索引，通过分窗口存储和倒排列表结构，只存储非零元素，实现高效的稀疏向量相似度搜索。</p>
+            </div>
+
+            <!-- 稀疏向量说明 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">什么是稀疏向量？</h3>
+                
+                <div class="grid md:grid-cols-2 gap-8 mb-6">
+                    <div>
+                        <h4 class="font-semibold text-pink-400 mb-4">稀疏向量 vs 稠密向量</h4>
+                        <div class="diagram-box">
+<pre>
+稠密向量（10000维）：
+[0.1, 0.0, 0.0, 0.3, 0.0, 0.5, ...]
+  ↓ 存储：10000 × 4字节 = 40KB
+
+稀疏向量表示：
+非零元素仅3个：
+  ids  = [0, 3, 5]
+  vals = [0.1, 0.3, 0.5]
+  ↓ 存储：3 × (4+4)字节 ≈ 24字节
+  ↓ 压缩比：约 1700:1</pre>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-pink-400 mb-4">典型应用场景</h4>
+                        <ul class="space-y-3 text-gray-300">
+                            <li class="flex items-start gap-3">
+                                <span class="text-pink-400 mt-1">▸</span>
+                                <span><strong class="text-white">文本 Embedding</strong>：TF-IDF、BM25 等特征，大部分维度为 0</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="text-pink-400 mt-1">▸</span>
+                                <span><strong class="text-white">推荐系统</strong>：用户-物品交互矩阵，用户只与少数物品交互</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="text-pink-400 mt-1">▸</span>
+                                <span><strong class="text-white">基因数据</strong>：基因表达数据，只在特定基因位点有表达</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 架构原理 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">架构原理</h3>
+                
+                <div class="mb-8">
+                    <h4 class="font-semibold text-pink-400 mb-4">1. 整体结构</h4>
+                    <div class="diagram-box">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      SINDI 架构                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   稀疏查询向量 ──→ 词项计算 ──→ 遍历相关窗口                   │
+│                                                             │
+│   对每个窗口：                                                │
+│   ├── 倒排列表求交                                           │
+│   ├── 相似度累加                                             │
+│   └── 维护 Top-K 堆                                          │
+│                                                             │
+│   需要时 ──→ 高精度重排序 ──→ 返回结果                        │
+│                                                             │
+│   ┌─────────────────────────────────────────────────────┐  │
+│   │                   存储结构                           │  │
+│   │  window_term_list_    标签表       重排序索引        │  │
+│   │  （窗口列表）         label_table_  rerank_index    │  │
+│   │                                                     │  │
+│   │  每个窗口内部：                                       │  │
+│   │  ┌─────────────────┐                                │  │
+│   │  │   倒排列表       │  term_id → [doc_ids + values] │  │
+│   │  │  term_id=0 ──→  │  [doc_5:0.5, doc_12:0.3, ...] │  │
+│   │  │  term_id=1 ──→  │  [doc_3:0.8, doc_8:0.2, ...]  │  │
+│   │  │  term_id=2 ──→  │  [doc_1:0.6, doc_7:0.4, ...]  │  │
+│   │  └─────────────────┘                                │  │
+│   └─────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                    </div>
+                </div>
+
+                <div class="mb-8">
+                    <h4 class="font-semibold text-pink-400 mb-4">2. 窗口（Window）机制</h4>
+                    <p class="text-gray-400 mb-4">SINDI 将数据分窗口存储，每个窗口管理固定数量的向量：</p>
+                    <div class="diagram-box">
+<pre>
+窗口 0（向量 0-9999）     窗口 1（向量 10000-19999）
+┌─────────────────┐       ┌─────────────────┐
+│ 词项0: [v0, v5] │       │ 词项0: [v10002] │
+│ 词项1: [v3, v8] │       │ 词项1: [v10005] │
+│ 词项2: [v1]     │       │ 词项2: [v10001] │
+└─────────────────┘       └─────────────────┘
+
+优势：
+1. 局部性：查询只需访问相关窗口
+2. 可扩展：动态添加新窗口
+3. 并行：多窗口可并行处理</pre>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-semibold text-pink-400 mb-4">3. 关键组件</h4>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-pink-400 font-bold mb-2">window_term_list_</div>
+                            <div class="text-gray-400 text-sm">分窗口存储稀疏向量，每个窗口包含独立的倒排列表</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-pink-400 font-bold mb-2">term_id_limit_</div>
+                            <div class="text-gray-400 text-sm">最大词项 ID 限制，决定倒排列表数组大小</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-pink-400 font-bold mb-2">window_size_</div>
+                            <div class="text-gray-400 text-sm">每个窗口的向量数量，影响内存和搜索效率</div>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-lg">
+                            <div class="text-pink-400 font-bold mb-2">doc_retain_ratio_</div>
+                            <div class="text-gray-400 text-sm">文档保留比例，用于剪枝低频词项</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 相似度计算 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">相似度计算原理</h3>
+                
+                <p class="text-gray-400 mb-4">稀疏向量的相似度通常使用<strong class="text-pink-400">点积（Dot Product）</strong>或<strong class="text-pink-400">余弦相似度</strong>：</p>
+                
+                <div class="diagram-box mb-6">
+<pre>
+Query:  {(2, 3.0), (4, 5.0), (6, 2.0)}  ← 只在维度 2,4,6 有值
+Doc:    {(0, 1.0), (2, 3.0), (6, 2.0)}  ← 只在维度 0,2,6 有值
+
+相似度计算：
+  共同维度：2 和 6
+  维度 2：3.0 × 3.0 = 9.0
+  维度 6：2.0 × 2.0 = 4.0
+  ─────────────────────────
+  总相似度：9.0 + 4.0 = 13.0
+
+优势：只需遍历共同非零维度，时间复杂度 O(|Query| + |Doc|)</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-pink-400 font-bold mb-2">倒排列表求交优化</div>
+                    <div class="text-gray-400 text-sm">
+                        通过倒排列表快速找到包含查询词项的文档，避免遍历所有文档。
+                        使用 WAND（Weak AND）或 BMW（Block-Max WAND）算法进行高效求交和剪枝。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 构建流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">构建流程</h3>
+                
+                <div class="diagram-box mb-6">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      SINDI 构建流程                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  稀疏向量输入                                                │
+│       ↓                                                     │
+│  1. 检查标签是否已存在                                        │
+│       ├── 已存在 ──→ 跳过/失败                               │
+│       └── 新标签 ──→ 继续                                    │
+│       ↓                                                     │
+│  2. 计算目标窗口 = cur_element_count / window_size_          │
+│       ↓                                                     │
+│  3. 窗口是否存在？                                           │
+│       ├── 否 ──→ 创建新窗口                                  │
+│       └── 是 ──→ 继续                                        │
+│       ↓                                                     │
+│  4. 插入倒排列表                                             │
+│       对每个非零维度：term_id ──→ 添加 (doc_id, value)       │
+│       ↓                                                     │
+│  5. 更新标签表                                               │
+│       label_table_->Insert(global_id, label)                │
+│       ↓                                                     │
+│  6. 可选：添加到重排序索引                                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-pink-400 font-bold mb-2">核心构建代码</div>
+                    <div class="diagram-box mt-2">
+<pre>
+std::vector&lt;int64_t&gt; SINDI::Add(const DatasetPtr& base, AddMode mode) {
+    // 1. 动态调整窗口数量
+    int64_t final_add_window = align_up(cur_element_count_ + data_num, window_size_) / window_size_;
+    while (window_term_list_.size() &lt; final_add_window) {
+        window_term_list_.emplace_back(
+            std::make_shared&lt;SparseTermDataCell&gt;(doc_retain_ratio_, term_id_limit_, ...)
+        );
+    }
+    
+    // 2. 逐个处理向量
+    for (uint32_t i = 0; i &lt; data_num; ++i) {
+        auto cur_window = cur_element_count_ / window_size_;
+        auto inner_id = static_cast&lt;uint16_t&gt;(cur_element_count_ - cur_window * window_size_);
+        
+        // 3. 插入到对应窗口的倒排列表
+        window_term_list_[cur_window]->InsertVector(sparse_vector, inner_id);
+        
+        // 4. 更新标签映射
+        label_table_->Insert(cur_element_count_, ids[i]);
+        
+        cur_element_count_++;
+    }
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 搜索流程 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">搜索流程</h3>
+                
+                <div class="diagram-box mb-6">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      SINDI 搜索流程                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 查询向量进入 ──→ 创建词项计算器                            │
+│       ↓                                                     │
+│  2. 遍历所有窗口（可并行）                                    │
+│       ↓                                                     │
+│  3. 对每个窗口：                                             │
+│       ├── 计算与所有文档的相似度（倒排列表求交）               │
+│       ├── 累加点积分数                                       │
+│       └── 维护 Top-K 最大堆                                  │
+│       ↓                                                     │
+│  4. 遍历完成                                                 │
+│       ↓                                                     │
+│  5. 需要重排序？                                             │
+│       ├── 是 ──→ 使用高精度索引重新计算相似度                 │
+│       └── 否 ──→ 直接返回                                    │
+│       ↓                                                     │
+│  6. 返回 Top-K 结果                                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <div class="bg-black/30 p-4 rounded-lg">
+                    <div class="text-pink-400 font-bold mb-2">核心搜索代码</div>
+                    <div class="diagram-box mt-2">
+<pre>
+DatasetPtr SINDI::search_impl(const SparseTermComputerPtr& computer, ...) {
+    MaxHeap heap(allocator);
+    Vector&lt;float&gt; dists(window_size_, 0.0, allocator);
+    
+    // 1. 遍历所有窗口
+    for (auto cur = min_window_id; cur &lt;= max_window_id; cur++) {
+        auto window_start_id = cur * window_size_;
+        auto term_list = this->window_term_list_[cur];
+        
+        // 2. 计算相似度
+        term_list->Query(dists.data(), computer);
+        
+        // 3. 将结果加入堆
+        term_list->InsertHeapByDists&lt;mode&gt;(dists.data(), dists.size(), heap, ...);
+    }
+    
+    // 4. 重排序（如果需要）
+    if (use_reorder_) {
+        return rerank_by_high_precision(heap);
+    }
+    
+    return collect_results(heap);
+}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 量化压缩 -->
+            <div class="card-dark p-8 rounded-2xl mb-8">
+                <h3 class="text-2xl font-bold mb-6 text-white">量化压缩</h3>
+                
+                <div class="mb-6">
+                    <h4 class="font-semibold text-pink-400 mb-4">量化过程</h4>
+                    <div class="diagram-box">
+<pre>
+// 将浮点值量化到8位整数
+uint8_t quantize(float val) {
+    float normalized = (val - min_val) / diff;  // 归一化到[0,1]
+    return static_cast&lt;uint8_t&gt;(normalized * 255);  // 映射到[0,255]
+}
+
+// 反量化
+float dequantize(uint8_t qval) {
+    return min_val + (qval / 255.0f) * diff;
+}</pre>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-semibold text-pink-400 mb-4">内存节省对比</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm comparison-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left p-3 rounded-tl-lg">存储方式</th>
+                                    <th class="text-left p-3">每个非零值大小</th>
+                                    <th class="text-left p-3 rounded-tr-lg">压缩比</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-gray-300">
+                                <tr>
+                                    <td class="p-3">FP32</td>
+                                    <td class="p-3">4字节</td>
+                                    <td class="p-3">1x</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-3">FP16</td>
+                                    <td class="p-3">2字节</td>
+                                    <td class="p-3">2x</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-3">8-bit 量化</td>
+                                    <td class="p-3">1字节</td>
+                                    <td class="p-3">4x</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心参数 -->
+            <div class="card-dark p-8 rounded-2xl">
+                <h3 class="text-2xl font-bold mb-6 text-white">核心参数</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">参数名</th>
+                                <th class="text-left p-3">类型</th>
+                                <th class="text-left p-3">默认值</th>
+                                <th class="text-left p-3 rounded-tr-lg">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-mono text-pink-400">term_id_limit</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">根据数据</td>
+                                <td class="p-3">最大词项ID，决定倒排列表数组大小</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-pink-400">window_size</td>
+                                <td class="p-3">int</td>
+                                <td class="p-3">10000-100000</td>
+                                <td class="p-3">每窗口向量数</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-pink-400">doc_prune_ratio</td>
+                                <td class="p-3">float</td>
+                                <td class="p-3">0.1-0.3</td>
+                                <td class="p-3">文档剪枝比例，用于过滤低频词项</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-pink-400">use_reorder</td>
+                                <td class="p-3">bool</td>
+                                <td class="p-3">true</td>
+                                <td class="p-3">是否启用高精度重排序</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-pink-400">use_quantization</td>
+                                <td class="p-3">bool</td>
+                                <td class="p-3">true</td>
+                                <td class="p-3">是否启用量化压缩</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- 量化技术 Section -->
+    <section id="quantization" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 gradient-text">量化技术</h2>
+            <p class="text-gray-400 text-lg mb-12">量化是向量检索中降低存储成本、提升查询效率的关键技术。VSAG 支持多种量化方式，从无损压缩到高压缩比方案。</p>
+
+            <div class="grid md:grid-cols-2 gap-8 mb-12">
+                <div class="card-dark p-8 rounded-2xl">
+                    <h3 class="text-2xl font-bold mb-4 text-cyan-400">标量量化（SQ）</h3>
+                    <p class="text-gray-400 mb-4">将浮点数值映射到较低精度的整数表示</p>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• <strong class="text-white">SQ8</strong>：8位量化，4x压缩比，精度损失小</li>
+                        <li>• <strong class="text-white">SQ4</strong>：4位量化，8x压缩比，适合高维数据</li>
+                        <li>• <strong class="text-white">SQ8Uniform</strong>：均匀分布优化版本</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-8 rounded-2xl">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-400">乘积量化（PQ）</h3>
+                    <p class="text-gray-400 mb-4">将高维向量分割成子空间，每个子空间独立量化</p>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 将 D 维向量分成 M 个子空间</li>
+                        <li>• 每个子空间训练码本（通常 256 个中心点）</li>
+                        <li>• 存储码本索引而非原始值</li>
+                        <li>• 压缩比可达 16x-64x</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card-dark p-8 rounded-2xl mb-12">
+                <h3 class="text-2xl font-bold mb-6 text-white">量化方式对比</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">量化类型</th>
+                                <th class="text-left p-3">压缩比</th>
+                                <th class="text-left p-3">精度损失</th>
+                                <th class="text-left p-3">计算速度</th>
+                                <th class="text-left p-3 rounded-tr-lg">适用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-mono text-cyan-400">FP32</td>
+                                <td class="p-3">1x</td>
+                                <td class="p-3">无</td>
+                                <td class="p-3">基准</td>
+                                <td class="p-3">精度敏感场景</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-cyan-400">FP16/BF16</td>
+                                <td class="p-3">2x</td>
+                                <td class="p-3">极低</td>
+                                <td class="p-3">快</td>
+                                <td class="p-3">GPU 加速场景</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-cyan-400">SQ8</td>
+                                <td class="p-3">4x</td>
+                                <td class="p-3">低</td>
+                                <td class="p-3">快</td>
+                                <td class="p-3">通用推荐</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-cyan-400">PQ</td>
+                                <td class="p-3">16x-64x</td>
+                                <td class="p-3">中</td>
+                                <td class="p-3">中</td>
+                                <td class="p-3">海量数据</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-mono text-cyan-400">RaBitQ</td>
+                                <td class="p-3">32x-256x</td>
+                                <td class="p-3">中高</td>
+                                <td class="p-3">快</td>
+                                <td class="p-3">极致压缩</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- 存储系统 Section -->
+    <section id="storage" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 gradient-text">存储系统</h2>
+            <p class="text-gray-400 text-lg mb-12">VSAG 提供灵活的存储策略，支持从纯内存到磁盘存储的多种模式，适应不同的数据规模和硬件环境。</p>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+                <div class="card-dark p-6 rounded-2xl text-center">
+                    <div class="text-2xl font-bold text-cyan-400 mb-2">memory_io</div>
+                    <div class="text-gray-400 text-sm mb-4">纯内存存储</div>
+                    <ul class="text-gray-300 text-xs text-left space-y-1">
+                        <li>• 访问速度最快</li>
+                        <li>• 适合中小数据</li>
+                        <li>• 数据不持久化</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-6 rounded-2xl text-center">
+                    <div class="text-2xl font-bold text-purple-400 mb-2">block_memory_io</div>
+                    <div class="text-gray-400 text-sm mb-4">块内存存储</div>
+                    <ul class="text-gray-300 text-xs text-left space-y-1">
+                        <li>• 分块管理内存</li>
+                        <li>• 减少内存碎片</li>
+                        <li>• 适合大规模数据</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-6 rounded-2xl text-center">
+                    <div class="text-2xl font-bold text-pink-400 mb-2">mmap_io</div>
+                    <div class="text-gray-400 text-sm mb-4">内存映射</div>
+                    <ul class="text-gray-300 text-xs text-left space-y-1">
+                        <li>• OS自动管理页</li>
+                        <li>• 大内存数据友好</li>
+                        <li>• 启动加载快</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-6 rounded-2xl text-center">
+                    <div class="text-2xl font-bold text-orange-400 mb-2">async_io</div>
+                    <div class="text-gray-400 text-sm mb-4">异步IO</div>
+                    <ul class="text-gray-300 text-xs text-left space-y-1">
+                        <li>• 重叠计算与IO</li>
+                        <li>• 适合磁盘存储</li>
+                        <li>• 高吞吐优化</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider max-w-6xl mx-auto"></div>
+
+    <!-- 选型指南 Section -->
+    <section id="comparison" class="relative z-10 py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 gradient-text">选型指南</h2>
+            <p class="text-gray-400 text-lg mb-12">根据数据特征和应用场景选择合适的索引类型</p>
+
+            <div class="card-dark p-8 rounded-2xl mb-12">
+                <h3 class="text-2xl font-bold mb-6 text-white">决策流程图</h3>
+                <div class="diagram-box">
+<pre>
+开始选型
+    │
+    ▼
+数据是否为稀疏向量？
+    ├── 是 ──→ 使用 SINDI
+    │
+    └── 否 ──→ 数据是否有层级/路径特征？
+                │
+                ├── 是 ──→ 使用 Pyramid
+                │           （多租户、分类数据、时间序列）
+                │
+                └── 否 ──→ 使用 HGraph
+                            （通用稠密向量，性能最优）</pre>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8 mb-12">
+                <div class="card-dark p-6 rounded-2xl">
+                    <h4 class="text-xl font-bold text-purple-400 mb-4">选择 HGraph 当...</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 通用稠密向量场景</li>
+                        <li>• 追求最高查询性能</li>
+                        <li>• 需要高召回率</li>
+                        <li>• 数据可放入内存或使用 MMap</li>
+                        <li>• 需要灵活的量化策略</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-6 rounded-2xl">
+                    <h4 class="text-xl font-bold text-orange-400 mb-4">选择 Pyramid 当...</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 数据有天然层级结构</li>
+                        <li>• 需要基于路径的过滤</li>
+                        <li>• 多租户数据隔离</li>
+                        <li>• 时间/地理分区数据</li>
+                        <li>• 亿级数据规模</li>
+                    </ul>
+                </div>
+                <div class="card-dark p-6 rounded-2xl">
+                    <h4 class="text-xl font-bold text-pink-400 mb-4">选择 SINDI 当...</h4>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 向量维度高且稀疏</li>
+                        <li>• 文本 Embedding（TF-IDF）</li>
+                        <li>• 推荐系统交互矩阵</li>
+                        <li>• 基因表达数据</li>
+                        <li>• 内存资源有限</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card-dark p-8 rounded-2xl">
+                <h3 class="text-2xl font-bold mb-6 text-white">性能对比总结</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm comparison-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left p-3 rounded-tl-lg">维度</th>
+                                <th class="text-left p-3">HGraph</th>
+                                <th class="text-left p-3">Pyramid</th>
+                                <th class="text-left p-3 rounded-tr-lg">SINDI</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-300">
+                            <tr>
+                                <td class="p-3 font-semibold">查询速度</td>
+                                <td class="p-3 text-purple-400">⭐⭐⭐⭐⭐</td>
+                                <td class="p-3 text-orange-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-pink-400">⭐⭐⭐⭐</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold">召回率</td>
+                                <td class="p-3 text-purple-400">⭐⭐⭐⭐⭐</td>
+                                <td class="p-3 text-orange-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-pink-400">⭐⭐⭐⭐</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold">内存效率</td>
+                                <td class="p-3 text-purple-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-orange-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-pink-400">⭐⭐⭐⭐⭐</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold">构建速度</td>
+                                <td class="p-3 text-purple-400">⭐⭐⭐</td>
+                                <td class="p-3 text-orange-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-pink-400">⭐⭐⭐⭐⭐</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold">增量更新</td>
+                                <td class="p-3 text-purple-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-orange-400">⭐⭐⭐⭐</td>
+                                <td class="p-3 text-pink-400">⭐⭐⭐</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="relative z-10 py-12 px-6 border-t border-cyan-500/20">
+        <div class="max-w-6xl mx-auto text-center">
+            <p class="text-gray-500 text-sm">VSAG 技术深潜报告 · 基于 VSAG 开源项目文档整理</p>
+            <p class="text-gray-600 text-xs mt-2">文档版本：2026.03</p>
+        </div>
+    </footer>
+
+</body>
+</html>
